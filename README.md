@@ -370,7 +370,7 @@ Returns the component catalog without pin lists.
 
 ----
 
-<img width="1850" height="985" alt="Screenshot From 2026-04-21 22-16-47" src="https://github.com/user-attachments/assets/41d2c766-240e-45e1-a97b-92aa39d744ff" />
+<img width="1867" height="982" alt="image" src="https://github.com/user-attachments/assets/6f80694e-9a39-4983-a3de-1a0c6a7643a2" />
 
 ---- 
 
