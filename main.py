@@ -7,8 +7,12 @@ import json
 import logging
 import os
 import re
+import asyncio
+import time
+from functools import lru_cache
 from typing import Any, List, Optional
 
+import httpx
 import litellm
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -21,6 +25,9 @@ from components import CATEGORY_META, COMPONENT_DATABASE
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+_mouser_cache: dict = {}
+MOUSER_CACHE_TTL = 3600
+
 app = FastAPI(title="AI Electronics Blueprint Generator", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -31,6 +38,12 @@ class BOMItem(BaseModel):
     name: str
     quantity: int
     unit_cost_usd: Optional[float] = None
+    mouser_pn: Optional[str] = None
+    mfr_pn: Optional[str] = None
+    availability: Optional[str] = None
+    datasheet_url: Optional[str] = None
+    product_url: Optional[str] = None
+    image_url: Optional[str] = None
     description: str
 
     @field_validator("quantity")
@@ -186,6 +199,77 @@ def repair_truncated_json(raw: str) -> str:
     if stack:
         repaired += "".join(reversed(stack))
     return repaired
+
+
+@lru_cache(maxsize=512)
+def _parse_mouser_price(price_text: str) -> Optional[float]:
+    if not price_text:
+        return None
+
+    cleaned = str(price_text).replace("$", "").replace(",", "").strip()
+    try:
+        return float(cleaned)
+    except (TypeError, ValueError):
+        return None
+
+
+async def fetch_mouser_price(search_keyword: str, api_key: str) -> dict:
+    cached = _mouser_cache.get(search_keyword)
+    now = time.time()
+    if cached and now - cached["ts"] < MOUSER_CACHE_TTL:
+        return cached["data"]
+
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            response = await client.post(
+                f"https://api.mouser.com/api/v1/search/keyword?apiKey={api_key}",
+                json={
+                    "SearchByKeywordRequest": {
+                        "keyword": search_keyword,
+                        "records": 3,
+                        "startingRecord": 0,
+                        "searchOptions": "InStock",
+                        "searchWithYourSignUpLanguage": "false",
+                    }
+                },
+                headers={"Content-Type": "application/json"},
+            )
+            response.raise_for_status()
+
+        payload = response.json()
+        parts = payload.get("SearchResults", {}).get("Parts") or []
+        if not parts:
+            return {}
+
+        part = parts[0]
+        price_breaks = part.get("PriceBreaks", []) or []
+        selected_break = next((pb for pb in price_breaks if pb.get("Quantity") == 1), None)
+        if selected_break is None and price_breaks:
+            selected_break = price_breaks[0]
+        unit_price = _parse_mouser_price(selected_break.get("Price", "")) if selected_break else None
+
+        product_url = part.get("ProductDetailUrl", "") or ""
+        if product_url.startswith("/"):
+            product_url = f"https://www.mouser.com{product_url}"
+
+        result = {
+            "mouser_pn": part.get("MouserPartNumber", ""),
+            "mfr_pn": part.get("ManufacturerPartNumber", ""),
+            "manufacturer": part.get("Manufacturer", ""),
+            "description": part.get("Description", ""),
+            "availability": part.get("Availability", ""),
+            "datasheet_url": part.get("DataSheetUrl", ""),
+            "product_url": product_url,
+            "min_order_qty": part.get("MinOrderQty", 1),
+            "unit_price": unit_price,
+            "image_url": part.get("ImagePath", ""),
+        }
+
+        _mouser_cache[search_keyword] = {"ts": time.time(), "data": result}
+        return result
+    except Exception as e:
+        logger.warning(f"Mouser API error for '{search_keyword}': {e}")
+        return {}
 
 
 # ─── LiteLLM Tool Schema ──────────────────────────────────────────────────────
@@ -425,6 +509,30 @@ async def generate_blueprint(req: GenerateRequest):
             meta = CATEGORY_META.get(comp["category"], {})
             item["category_label"] = meta.get("label", comp["category"])
             item["icon"]           = meta.get("icon", "🔧")
+
+    # ── Enrich BOM with Mouser live pricing ──
+    mouser_api_key = os.getenv("MOUSER_API_KEY")
+    if mouser_api_key:
+        pairs = []
+        for item in result["bom"]:
+            search_keyword = COMPONENT_DATABASE.get(item["component_id"], {}).get("mouser_search", item["name"])
+            pairs.append((item, search_keyword))
+
+        mouser_results = await asyncio.gather(
+            *[fetch_mouser_price(search_keyword, mouser_api_key) for _, search_keyword in pairs],
+            return_exceptions=True,
+        )
+
+        for (item, _), mouser_result in zip(pairs, mouser_results):
+            if isinstance(mouser_result, Exception) or not mouser_result:
+                continue
+            item["unit_cost_usd"] = mouser_result["unit_price"]
+            item["mouser_pn"] = mouser_result["mouser_pn"]
+            item["mfr_pn"] = mouser_result["mfr_pn"]
+            item["availability"] = mouser_result["availability"]
+            item["datasheet_url"] = mouser_result["datasheet_url"]
+            item["product_url"] = mouser_result["product_url"]
+            item["image_url"] = mouser_result["image_url"]
 
     result["category_meta"] = CATEGORY_META
     return result

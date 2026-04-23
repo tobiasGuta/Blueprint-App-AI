@@ -490,6 +490,18 @@
     border-radius: 20px;
     padding: 24px;
   }
+  .bom-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .bom-title {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
   .bom-stats {
     display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;
   }
@@ -499,6 +511,7 @@
   }
   .stat-card .val { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
   .stat-card .lbl { font-size: 0.72rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .05em; }
+  .stat-card .val.live-status { font-size: 1rem; line-height: 1.3; }
   .bom-actions { display: flex; gap: 10px; margin-bottom: 20px; }
   .btn-sm {
     background: var(--panel); border: 1px solid var(--border);
@@ -506,6 +519,23 @@
     font-size: 0.82rem; cursor: pointer; transition: all .15s;
   }
   .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-refresh {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: border-color .15s, color .15s, transform .15s;
+  }
+  .btn-refresh:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: rotate(20deg);
+  }
+  .bom-table-shell { overflow-x: auto; }
 
   table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
   thead th {
@@ -527,6 +557,13 @@
   }
   .comp-name { font-weight: 600; }
   .comp-desc { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+  .comp-meta {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
   .qty-badge {
     background: #0f1f0f; border: 1px solid rgba(74,222,128,.18);
     border-radius: 6px; padding: 3px 10px;
@@ -534,6 +571,64 @@
     color: var(--accent);
   }
   .cost { font-family: var(--font-mono); font-size: 0.8rem; color: var(--green); }
+  .mouser-pn {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: #64748b;
+  }
+  .stock-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .stock-state.in-stock { color: var(--green); }
+  .stock-state.out-stock { color: var(--red); }
+  .stock-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 10px currentColor;
+    flex-shrink: 0;
+  }
+  .price-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .price-main {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--green);
+  }
+  .price-total {
+    font-size: 0.74rem;
+    color: var(--muted);
+  }
+  .link-pills {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .link-pill {
+    background: #111;
+    border: 1px solid #222;
+    padding: 3px 8px;
+    border-radius: 6px;
+    color: #888;
+    text-decoration: none;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    transition: color .15s, border-color .15s;
+  }
+  .link-pill:hover {
+    color: #4ade80;
+    border-color: rgba(74,222,128,.35);
+  }
 
   /* ── ERROR ── */
   .error-banner {
@@ -725,21 +820,29 @@
       <!-- BOM -->
       <div class="tab-content" id="tab-bom">
         <div id="bom-wrap">
+          <div class="bom-head">
+            <div class="bom-title">Bill of Materials</div>
+            <button class="btn-refresh" type="button" onclick="window.refreshPrices()" aria-label="Refresh live pricing">🔄</button>
+          </div>
           <div class="bom-stats" id="bom-stats"></div>
           <div class="bom-actions">
             <button class="btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
           </div>
-          <table id="bom-table">
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th>Component</th>
-                <th>Qty</th>
-                <th>Est. Cost</th>
-              </tr>
-            </thead>
-            <tbody id="bom-tbody"></tbody>
-          </table>
+          <div class="bom-table-shell">
+            <table id="bom-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Component</th>
+                  <th>Mouser P/N</th>
+                  <th>Availability</th>
+                  <th>Unit Price</th>
+                  <th>Links</th>
+                </tr>
+              </thead>
+              <tbody id="bom-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
@@ -1494,11 +1597,49 @@ window.resetSchematic = () => {};
 // ══════════════════════════════════════════════════════════════════════════════
 // BOM TABLE
 // ══════════════════════════════════════════════════════════════════════════════
+function formatAvailability(availability) {
+  const raw = String(availability || '').trim();
+  if (raw.includes('In Stock')) {
+    const count = raw.match(/[\d,]+/)?.[0] || raw.replace(/In Stock/ig, '').trim() || raw;
+    return `<span class="stock-state in-stock"><span class="stock-dot"></span>${escXml(count)}</span>`;
+  }
+
+  if (!raw || /(^|[^\d])0([^\d]|$)/.test(raw)) {
+    return `<span class="stock-state out-stock"><span class="stock-dot"></span>Out of Stock</span>`;
+  }
+
+  return `<span class="stock-state out-stock"><span class="stock-dot"></span>${escXml(raw)}</span>`;
+}
+
+function formatUnitPrice(item) {
+  if (typeof item.unit_cost_usd !== 'number' || Number.isNaN(item.unit_cost_usd)) {
+    return `<span style="color:var(--muted)">—</span>`;
+  }
+
+  const total = item.unit_cost_usd * item.quantity;
+  return `<div class="price-stack">
+    <div class="price-main">$${item.unit_cost_usd.toFixed(2)} per unit</div>
+    <div class="price-total">Total: $${total.toFixed(2)} (unit × ${item.quantity})</div>
+  </div>`;
+}
+
+function formatMouserLinks(item) {
+  const links = [];
+  if (item.datasheet_url) {
+    links.push(`<a class="link-pill" href="${escXml(item.datasheet_url)}" target="_blank" rel="noopener noreferrer" title="Open datasheet">📄</a>`);
+  }
+  if (item.product_url) {
+    links.push(`<a class="link-pill" href="${escXml(item.product_url)}" target="_blank" rel="noopener noreferrer" title="Open Mouser product page">🛒</a>`);
+  }
+  return links.length ? `<div class="link-pills">${links.join('')}</div>` : `<span style="color:var(--muted)">—</span>`;
+}
+
 function buildBOM(data) {
   const tbody = document.getElementById('bom-tbody');
   tbody.innerHTML = '';
 
   let totalQty = 0, totalCost = 0, catSet = new Set();
+  const hasLivePricing = data.bom.some(item => item.mouser_pn);
 
   data.bom.forEach(item => {
     totalQty += item.quantity;
@@ -1508,15 +1649,17 @@ function buildBOM(data) {
     const color = item.color || '#888';
     const catLabel = item.category_label || item.category || 'Component';
     const icon = item.icon || '🔧';
-    const costStr = item.unit_cost_usd
-      ? `<span class="cost">$${(item.unit_cost_usd * item.quantity).toFixed(2)}</span>`
-      : `<span style="color:var(--muted)">—</span>`;
+    const mouserPn = item.mouser_pn
+      ? `<span class="mouser-pn">${escXml(item.mouser_pn)}</span>`
+      : `<span class="mouser-pn">—</span>`;
 
     tbody.insertAdjacentHTML('beforeend', `<tr>
       <td><span class="cat-badge" style="color:${color};border-color:${color}">${icon} ${escXml(catLabel)}</span></td>
-      <td><div class="comp-name">${escXml(item.name)}</div><div class="comp-desc">${escXml(item.description)}</div></td>
-      <td><span class="qty-badge">×${item.quantity}</span></td>
-      <td>${costStr}</td>
+      <td><div class="comp-name">${escXml(item.name)}</div><div class="comp-desc">${escXml(item.description)}</div><div class="comp-meta"><span class="qty-badge">×${item.quantity}</span></div></td>
+      <td>${mouserPn}</td>
+      <td>${formatAvailability(item.availability)}</td>
+      <td>${formatUnitPrice(item)}</td>
+      <td>${formatMouserLinks(item)}</td>
     </tr>`);
   });
 
@@ -1526,8 +1669,14 @@ function buildBOM(data) {
     <div class="stat-card"><div class="val">${totalQty}</div><div class="lbl">Total Parts</div></div>
     <div class="stat-card"><div class="val">${catSet.size}</div><div class="lbl">Categories</div></div>
     <div class="stat-card"><div class="val">${totalCost > 0 ? '$'+totalCost.toFixed(2) : '—'}</div><div class="lbl">Est. Total Cost</div></div>
+    <div class="stat-card"><div class="val live-status" style="color:${hasLivePricing ? 'var(--green)' : 'var(--muted)'}">${hasLivePricing ? '✓ Mouser' : '— Offline'}</div><div class="lbl">Live Pricing</div></div>
     <div class="stat-card"><div class="val">${data.connections.length}</div><div class="lbl">Wire Connections</div></div>`;
 }
+
+window.refreshPrices = function() {
+  if (!blueprintData) return;
+  buildBOM(blueprintData);
+};
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CSV EXPORT

@@ -8,6 +8,7 @@ Blueprint App is an AI-assisted electronics design tool for turning a plain-Engl
 It generates:
 
 - a validated bill of materials
+- live Mouser pricing and availability when configured
 - component placements
 - wiring connections
 - design notes
@@ -22,6 +23,7 @@ The project uses:
 - `Three.js` for the 3D viewer
 - HTML canvas plus plain JavaScript for the schematic renderer
 - plain HTML, CSS, and JavaScript for the frontend
+- `httpx` for async Mouser API pricing lookups
 
 ## What It Does
 
@@ -53,7 +55,7 @@ That model output is then validated, cleaned, enriched with local component meta
 - Compact PCB-style auto-layout pass on the frontend
 - X-ray style 3D viewer with category layers
 - Interactive canvas-based wiring diagram with draggable components
-- BOM stats and CSV export
+- BOM stats, live Mouser pricing, datasheet/product links, and CSV export
 
 ## Architecture
 
@@ -69,6 +71,7 @@ Responsibilities:
 - recover from malformed model responses
 - validate and sanitize the returned blueprint
 - enrich placements and BOM rows with component metadata
+- enrich BOM rows with cached Mouser pricing and availability data when `MOUSER_API_KEY` is set
 - serve API endpoints and the frontend
 
 API endpoints:
@@ -88,6 +91,7 @@ Each component entry includes:
 - dimensions
 - color
 - pins
+- Mouser search keywords
 
 The model is instructed to use only component IDs from this catalog.
 
@@ -103,7 +107,7 @@ It includes:
 - project summary card
 - 3D visualization
 - schematic visualization
-- BOM table
+- BOM table with live pricing, stock status, and links
 - CSV export
 
 ## Generation Flow
@@ -167,6 +171,7 @@ The backend attaches:
 - categories
 - pins
 - category labels and icons
+- Mouser pricing, availability, and external links when configured
 
 ### 8. Frontend layout and rendering
 
@@ -224,7 +229,10 @@ The BOM tab shows:
 - category badges
 - component names and descriptions
 - quantities
-- estimated costs
+- Mouser part numbers
+- stock availability
+- live unit pricing and total pricing
+- datasheet and product links
 - summary stat cards
 - CSV export
 
@@ -274,13 +282,14 @@ pip install -r requirements.txt
 
 ### 3. Configure environment variables
 
-Copy `.env.example` to `.env` and provide one provider key.
+Copy `.env.example` to `.env` and provide one provider key. Add a Mouser API key as well if you want live BOM pricing and stock availability.
 
 Supported keys:
 
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
 - `GEMINI_API_KEY`
+- `MOUSER_API_KEY`
 
 ### 4. Run the server
 
@@ -316,6 +325,16 @@ Response includes:
 - `placements`
 - `connections`
 - `category_meta`
+
+Each BOM item may also include live Mouser fields such as:
+
+- `unit_cost_usd`
+- `mouser_pn`
+- `mfr_pn`
+- `availability`
+- `datasheet_url`
+- `product_url`
+- `image_url`
 
 ### `GET /api/components`
 
@@ -355,13 +374,15 @@ Returns the component catalog without pin lists.
 
 ---- 
 
+https://github.com/user-attachments/assets/0f31b12d-e2ea-4d6e-a076-273fa3029fae
+
 
 ## Limitations
 
 - This is concept and planning tooling, not manufacturing output
 - The schematic is a systems diagram, not an EDA-native design file
 - Routing and spatial layout are visual approximations
-- Costs depend on model output and catalog metadata
+- Costs and stock data depend on Mouser API results when enabled
 - Results still depend heavily on prompt quality
 
 ## Extending The Project

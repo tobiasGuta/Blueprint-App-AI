@@ -343,6 +343,51 @@ COMPONENT_DATABASE = {
     },
 }
 
+MOUSER_SEARCH_KEYWORDS = {
+    "arduino_uno": "Arduino Uno R3 ATmega328P",
+    "esp32_devkit": "ESP32-DevKitC-32E",
+    "raspberry_pi_pico": "Raspberry Pi Pico RP2040",
+    "flight_controller_f4": "STM32F405 flight controller",
+    "raspberry_pi_4b": "Raspberry Pi 4 Model B 4GB",
+    "dht22": "DHT22 AM2302 temperature humidity sensor",
+    "mpu6050": "MPU-6050 6-axis gyroscope accelerometer",
+    "hc_sr04": "HC-SR04 ultrasonic distance sensor",
+    "bmp280": "BMP280 barometric pressure sensor",
+    "soil_moisture_sensor": "capacitive soil moisture sensor",
+    "pir_hcsr501": "HC-SR501 PIR motion sensor",
+    "neo_6m_gps": "NEO-6M GPS module u-blox",
+    "ph_sensor": "pH sensor module analog BNC",
+    "water_level_sensor": "water level sensor module",
+    "lm35_temp": "LM35DZ temperature sensor TO-92",
+    "servo_sg90": "SG90 micro servo 9g",
+    "brushless_2204": "2204 brushless motor 2300KV",
+    "esc_30a": "30A brushless ESC BLHeli",
+    "l298n_driver": "L298N dual H-bridge motor driver",
+    "relay_5v": "5V relay module optocoupler",
+    "water_pump_5v": "submersible mini water pump 5V DC",
+    "grow_light_strip": "LED grow light strip full spectrum 12V",
+    "dc_motor_6v": "TT gear motor 6V DC robot",
+    "lipo_3s_2200": "3S LiPo battery 2200mAh 11.1V XT60",
+    "pdb_quadcopter": "quadcopter power distribution board PDB",
+    "buck_lm2596": "LM2596 buck converter step-down DC-DC",
+    "solar_panel_5v": "5V 1W monocrystalline solar panel",
+    "usb_powerbank": "USB power bank 10000mAh",
+    "hc05_bluetooth": "HC-05 Bluetooth module UART",
+    "nrf24l01_pa": "nRF24L01+ PA LNA 2.4GHz transceiver",
+    "rc_receiver_6ch": "6 channel RC receiver 2.4GHz FHSS",
+    "lora_e22": "E22 LoRa SX1262 433MHz UART module",
+    "oled_096": "SSD1306 OLED 0.96 inch 128x64 I2C",
+    "lcd_1602_i2c": "LCD 16x2 I2C PCF8574 backlight",
+    "resistor_10k": "resistor 10k ohm 1/4W through-hole",
+    "capacitor_100uf": "capacitor 100uF 25V electrolytic",
+    "led_rgb": "RGB LED 5mm common cathode",
+    "buzzer_active": "active buzzer 5V piezo 85dB",
+}
+
+for component_id, search_keyword in MOUSER_SEARCH_KEYWORDS.items():
+    if component_id in COMPONENT_DATABASE:
+        COMPONENT_DATABASE[component_id]["mouser_search"] = search_keyword
+
 # Category metadata for frontend display
 CATEGORY_META = {
     "microcontroller": {"label": "Microcontroller", "color": "#1a6bcc", "icon": "💻"},
